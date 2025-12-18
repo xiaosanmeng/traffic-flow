@@ -73,14 +73,11 @@ def main():
             elapsed = time.time() - start_time
             print(f"完成! 用时: {elapsed:.2f}秒")
             results['User Equilibrium'] = ue_flows
+
+        # print(results)
         
-        # 4. 评估结果
+        # 4. 对每个算法保存并评估结果
         print("\n3. 评估分配结果...")
-        
-        # 比较不同算法
-        if len(results) > 1:
-            comparison = Evaluator.compare_algorithms(network, od_matrix, results)
-            Evaluator.print_comparison_table(comparison)
         
         # 对每个方法保存结果
         for method_name, flows in results.items():
@@ -88,8 +85,8 @@ def main():
             total_time = Evaluator.calculate_total_travel_time(network, flows)
             print(f"\n{method_name} 总出行时间: {total_time:.2f} (车·分钟)")
             
-            # 打印路段流量详情
-            Evaluator.print_link_flow_details(network, flows)
+            # 打印路段流量详情(方法内容和算法比较方法重复)
+            # Evaluator.print_link_flow_details(network, flows)
             
             # 保存结果到文件
             output_file = f"{args.output}_{method_name.replace(' ', '_')}.csv"
@@ -98,12 +95,17 @@ def main():
             # 可视化
             fig, ax = Visualizer.plot_network(
                 network, 
-                flows,
-                title=f"{method_name} 分配结果",
+                method_name,
+                output_file,
                 save_path=f"{args.output}_{method_name.replace(' ', '_')}.png"
             )
         
         print(f"\n分配完成! 结果文件已保存到 {args.output}_*.csv 和 {args.output}_*.png")
+
+        # 比较不同算法
+        if len(results) > 1:
+            comparison = Evaluator.compare_algorithms(network, od_matrix, results)
+            Evaluator.print_comparison_table(comparison)
         
         # 5. 显示用户均衡下的路径流量
         if 'User Equilibrium' in results:
@@ -112,7 +114,7 @@ def main():
     
     except FileNotFoundError as e:
         print(f"错误: 文件未找到 - {e}")
-        print("请使用 --create_example 参数创建示例文件")
+        # print("请使用 --create_example 参数创建示例文件")
     except Exception as e:
         print(f"错误: {e}")
         import traceback

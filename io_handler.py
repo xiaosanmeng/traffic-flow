@@ -155,12 +155,16 @@ class IOHandler:
         for link_id, flow in link_flows.items():
             link = network.links[link_id]
             
-            # 跳过反向路段（ID大于1000的）
+            # 合并反向路段
             if link_id >= 1000:
                 continue
+
+            reverse_link_id = link_id * 1000
+            reverse_link = network.links[reverse_link_id]
+            reverse_flow = link_flows.get(reverse_link_id, 0)
             
-            travel_time = link.get_travel_time(flow)
-            volume_capacity_ratio = flow / link.capacity if link.capacity > 0 else 0
+            travel_time = 60 * (link.get_travel_time(flow) + reverse_link.get_travel_time(reverse_flow))
+            volume_capacity_ratio = (flow + reverse_flow) / link.capacity if link.capacity > 0 else 0
             
             results.append({
                 'link_id': link_id,
@@ -170,7 +174,7 @@ class IOHandler:
                 'max_speed_kmh': link.max_speed,
                 'free_flow_time_min': link.free_flow_time * 60,  # 转换为分钟
                 'capacity_veh_h': link.capacity,
-                'flow_veh_h': flow,
+                'flow_veh_h': flow + reverse_flow,
                 'v_c_ratio': volume_capacity_ratio,
                 'travel_time_min': travel_time,  # 已经是分钟
                 'additional_delay_min': travel_time - (link.free_flow_time * 60)
@@ -192,31 +196,31 @@ class IOHandler:
         
         return df
     
-    @staticmethod
-    def create_example_files():
-        # 格式化输出
-        print("\n节点坐标（千米）:")
-        print("名称  X坐标  Y坐标")
-        for i in range(len(network_data["nodes"]["name"])):
-            name = network_data["nodes"]["name"][i]
-            x = network_data["nodes"]["x"][i]
-            y = network_data["nodes"]["y"][i]
-            print(f"{name:2}    {x:5.1f}  {y:5.1f}")
+    # @staticmethod
+    # def create_example_files():
+    #     # 格式化输出
+    #     print("\n节点坐标（千米）:")
+    #     print("名称  X坐标  Y坐标")
+    #     for i in range(len(network_data["nodes"]["name"])):
+    #         name = network_data["nodes"]["name"][i]
+    #         x = network_data["nodes"]["x"][i]
+    #         y = network_data["nodes"]["y"][i]
+    #         print(f"{name:2}    {x:5.1f}  {y:5.1f}")
         
-        print("\n路段信息:")
-        print("路段  通行能力(辆/小时)  最大限速(千米/小时)")
-        for i in range(len(network_data["links"]["between"])):
-            between = network_data["links"]["between"][i]
-            capacity = network_data["links"]["capacity"][i]
-            speed = network_data["links"]["speedmax"][i]
-            print(f"{between:4}    {capacity:10}        {speed:10}")
+    #     print("\n路段信息:")
+    #     print("路段  通行能力(辆/小时)  最大限速(千米/小时)")
+    #     for i in range(len(network_data["links"]["between"])):
+    #         between = network_data["links"]["between"][i]
+    #         capacity = network_data["links"]["capacity"][i]
+    #         speed = network_data["links"]["speedmax"][i]
+    #         print(f"{between:4}    {capacity:10}        {speed:10}")
         
-        print("\n出行需求:")
-        print("起点  迄点  交通量(辆/小时)")
-        for i in range(len(demand_data["from"])):
-            origin = demand_data["from"][i]
-            dest = demand_data["to"][i]
-            amount = demand_data["amount"][i]
-            print(f"{origin:2}    {dest:2}    {amount:10}")
+    #     print("\n出行需求:")
+    #     print("起点  迄点  交通量(辆/小时)")
+    #     for i in range(len(demand_data["from"])):
+    #         origin = demand_data["from"][i]
+    #         dest = demand_data["to"][i]
+    #         amount = demand_data["amount"][i]
+    #         print(f"{origin:2}    {dest:2}    {amount:10}")
         
-        return network_data, demand_data
+    #     return network_data, demand_data

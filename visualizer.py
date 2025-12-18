@@ -2,6 +2,7 @@
 visualizer.py - 可视化模块（使用节点坐标）
 """
 
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import numpy as np
@@ -14,8 +15,8 @@ class Visualizer:
     @staticmethod
     def plot_network(
         network: Network, 
-        link_flows: Dict[int, float] = None,
-        title: str = "交通网络流量分配图",
+        method_name: str,
+        output_file: str,
         save_path: str = None,
         show_node_names: bool = True,
         show_link_flows: bool = True
@@ -24,6 +25,11 @@ class Visualizer:
         绘制路网流量图（使用节点坐标）
         """
         fig, ax = plt.subplots(figsize=(14, 10))
+        # 定义色阶（ RdYlBu_r 颜色映射）
+        camp = cm.colors.LinearSegmentedColormap.from_list(
+    'truncated_seismic',  
+    cm.RdYlBu_r(np.linspace(0.6, 1, 256))  # 截取0.5~1的色阶
+)
         
         # 获取节点位置
         node_positions = {}
@@ -31,30 +37,22 @@ class Visualizer:
             node_positions[node_id] = (node.x, node.y)
         
         # 绘制路段
+        # 从CSV文件中获取流量数据
+        df = pd.read_csv(output_file)
+        link_flows = dict(zip(df['link_id'], df['flow_veh_h']))
         max_flow = max(link_flows.values()) if link_flows and link_flows.values() else 1
         min_flow = min(link_flows.values()) if link_flows and link_flows.values() else 0
         
-        # 只绘制原始路段（ID小于1000的），避免重复绘制双向路段
-        drawn_links = set()
         
         for link_id, link in network.links.items():
-            # 只绘制原始路段
+            # 双向合并
             if link_id >= 1000:
                 continue
             
             from_pos = node_positions[link.from_node]
             to_pos = node_positions[link.to_node]
             
-            # 检查是否已经绘制过反向
-            reverse_key = (link.to_name, link.from_name)
-            if reverse_key in drawn_links:
-                # 调整绘制位置以避免重叠
-                offset = 0.8
-            else:
-                offset = 0
-                drawn_links.add((link.from_name, link.to_name))
-            
-            # 计算箭头位置（考虑偏移）
+            # 计算方向向量
             dx = to_pos[0] - from_pos[0]
             dy = to_pos[1] - from_pos[1]
             
@@ -63,15 +61,14 @@ class Visualizer:
             if length > 0:
                 dx, dy = dx/length, dy/length
             
-            # 垂直方向偏移量
-            perp_dx = -dy * 0.5 * offset
-            perp_dy = dx * 0.5 * offset
-            
-            # 起点和终点（考虑偏移）
-            start_x = from_pos[0] + perp_dx
-            start_y = from_pos[1] + perp_dy
-            end_x = to_pos[0] + perp_dx
-            end_y = to_pos[1] + perp_dy
+            # 垂直方向偏移量（法向量）
+            perp_dx = -dy * 0.5 
+            perp_dy = dx * 0.5 
+            # 起点和终点
+            start_x = from_pos[0]
+            start_y = from_pos[1]
+            end_x = to_pos[0]
+            end_y = to_pos[1]
             
             # 线宽和颜色基于流量
             if link_flows:
@@ -83,25 +80,22 @@ class Visualizer:
                     normalized_flow = 0.5
                 
                 # 使用颜色映射
-                color = cm.RdYlBu_r(normalized_flow)
+                # color = cm.RdYlBu_r(normalized_flow)
+                color = camp(normalized_flow)
                 
                 # 线宽与流量成正比
                 linewidth = 1 + 5 * normalized_flow
                 
-                # 绘制带箭头的线
-                arrow = ax.annotate('', 
-                           xy=(end_x, end_y), 
-                           xytext=(start_x, start_y),
-                           arrowprops=dict(arrowstyle='->', 
-                                         color=color, 
-                                         lw=linewidth,
-                                         alpha=0.8,
-                                         shrinkA=5, shrinkB=5))
+                # 绘制交通路线
+                line = ax.plot([start_x, end_x], [start_y, end_y], 
+                       color=color, alpha=0.8, linewidth=linewidth)
                 
                 # 标注流量
                 if show_link_flows and flow > 0.1:
                     mid_x = (start_x + end_x) / 2 + perp_dx * 0.5
                     mid_y = (start_y + end_y) / 2 + perp_dy * 0.5
+                    # mid_x = (start_x + end_x) / 2 
+                    # mid_y = (start_y + end_y) / 2   
                     
                     # 计算角度
                     angle = np.degrees(np.arctan2(dy, dx))
@@ -116,13 +110,13 @@ class Visualizer:
                                    alpha=0.8))
                 
                 # 在箭头旁边标注路段名称
-                name_x = (start_x + end_x) / 2 + perp_dx * 1.5
-                name_y = (start_y + end_y) / 2 + perp_dy * 1.5
+                # name_x = (start_x + end_x) / 2 + perp_dx * 1.5
+                # name_y = (start_y + end_y) / 2 + perp_dy * 1.5
                 
-                ax.text(name_x, name_y, 
-                       f'{link.from_name}{link.to_name}',
-                       fontsize=8, ha='center', va='center',
-                       color='darkblue', alpha=0.7)
+                # ax.text(name_x, name_y, 
+                #        f'{link.from_name}{link.to_name}',
+                #        fontsize=8, ha='center', va='center',
+                #        color='darkblue', alpha=0.7)
             else:
                 # 无流量信息，绘制基本网络
                 ax.plot([start_x, end_x], [start_y, end_y], 
@@ -143,16 +137,16 @@ class Visualizer:
         
         # 添加颜色条
         if link_flows and max_flow > 0:
-            sm = plt.cm.ScalarMappable(cmap=cm.RdYlBu_r, 
+            sm = plt.cm.ScalarMappable(cmap=camp, 
                                       norm=plt.Normalize(vmin=min_flow, 
                                                        vmax=max_flow))
             sm.set_array([])
             cbar = plt.colorbar(sm, ax=ax, fraction=0.03, pad=0.04)
-            cbar.set_label('路段流量 (veh/h)', fontsize=12)
+            cbar.set_label('Traffic Flow (veh/h)', fontsize=12)
         
-        ax.set_title(title, fontsize=16, fontweight='bold')
-        ax.set_xlabel('X 坐标 (km)', fontsize=12)
-        ax.set_ylabel('Y 坐标 (km)', fontsize=12)
+        ax.set_title(method_name, fontsize=16, fontweight='bold')
+        ax.set_xlabel('X (km)', fontsize=12)
+        ax.set_ylabel('Y (km)', fontsize=12)
         ax.grid(True, alpha=0.3, linestyle='--')
         ax.set_aspect('equal')
         
@@ -165,8 +159,8 @@ class Visualizer:
         plt.tight_layout()
         
         if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-            print(f"网络图已保存到: {save_path}")
+            plt.savefig(save_path.replace('csv', 'png'), dpi=300, bbox_inches='tight')
+            print(f"网络图已保存到: {save_path.replace('csv', 'png')}")
         
         return fig, ax
     

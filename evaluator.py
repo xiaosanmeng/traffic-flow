@@ -50,14 +50,14 @@ class Evaluator:
         vc_ratios = {}
         
         for link_id, flow in link_flows.items():
-            # 只计算原始路段
+            # 双向合并计算
             if link_id >= 1000:
                 continue
                 
             link = network.links[link_id]
             if link.capacity > 0:
-                key = f"{link.from_name}{link.to_name}"
-                vc_ratios[key] = flow / link.capacity
+                key = f"{link.from_name}{link.to_name}" # 双向
+                vc_ratios[key] = (flow + link_flows.get(link_id + 1000, 0)) / link.capacity
         
         return vc_ratios
     
@@ -153,14 +153,13 @@ class Evaluator:
         """打印路段流量详情"""
         print("\n路段流量详情:")
         print("-"*80)
-        print("路段   流量(veh/h)  容量(veh/h)  V/C比   行程时间(分钟)  自由流时间(分钟)")
-        print("-"*80)
+        print("路段   流量(veh/h)   容量(veh/h)  V/C比   行程时间(min)   自由流时间(min)")
+        # print("-"*80)
         
         total_flow = 0
-        total_capacity = 0
         
         for link_id, flow in link_flows.items():
-            # 只显示原始路段
+            # 双向合并
             if link_id >= 1000:
                 continue
                 
@@ -169,13 +168,12 @@ class Evaluator:
             free_flow_time_min = link.free_flow_time * 60
             vc_ratio = flow / link.capacity if link.capacity > 0 else 0
             
-            print(f"{link.from_name}{link.to_name}  "
-                  f"{flow:<12.1f} {link.capacity:<12.1f} "
-                  f"{vc_ratio:<7.3f} {travel_time:<15.2f} "
-                  f"{free_flow_time_min:<15.2f}")
+            print(f"{link.from_name}{link.to_name}     "
+                  f"{flow:^11.1f}   {link.capacity:<11.1f}   "
+                  f"{vc_ratio:<5.3f}   {travel_time:<13.2f}   "
+                  f"{free_flow_time_min:<13.2f}")
             
-            total_flow += flow
-            total_capacity += link.capacity
+            total_flow += flow + link_flows[link_id + 1000]
         
         print("-"*80)
-        print(f"总计    {total_flow:<12.1f} {total_capacity:<12.1f}")
+        print(f"总计    {total_flow:<12.1f} ")

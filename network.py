@@ -31,7 +31,7 @@ class Link:
     
     def get_travel_time(self, flow: float) -> float:
         """
-        根据给定的行程时间函数计算行程时间
+        根据给定的行程时间函数计算行程时间(小时)
         t(q) = t0 * (1 + q/capacity)^2
         其中 t0 = length / max_speed
         """
