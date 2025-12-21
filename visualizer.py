@@ -45,9 +45,9 @@ class Visualizer:
         
         
         for link_id, link in network.links.items():
-            # 双向合并
-            if link_id >= 1000:
-                continue
+            # # 双向合并
+            # if link_id >= 1000:
+            #     continue
             
             from_pos = node_positions[link.from_node]
             to_pos = node_positions[link.to_node]
@@ -62,13 +62,13 @@ class Visualizer:
                 dx, dy = dx/length, dy/length
             
             # 垂直方向偏移量（法向量）
-            perp_dx = -dy * 0.5 
-            perp_dy = dx * 0.5 
+            perp_dx = -dy * 0.5 * 0.4
+            perp_dy = dx * 0.5 * 0.4
             # 起点和终点
-            start_x = from_pos[0]
-            start_y = from_pos[1]
-            end_x = to_pos[0]
-            end_y = to_pos[1]
+            start_x = from_pos[0] + perp_dx
+            start_y = from_pos[1] + perp_dy
+            end_x = to_pos[0] + perp_dx
+            end_y = to_pos[1] + perp_dy
             
             # 线宽和颜色基于流量
             if link_flows:
@@ -86,9 +86,19 @@ class Visualizer:
                 # 线宽与流量成正比
                 linewidth = 1 + 5 * normalized_flow
                 
-                # 绘制交通路线
-                line = ax.plot([start_x, end_x], [start_y, end_y], 
-                       color=color, alpha=0.8, linewidth=linewidth)
+                # # 绘制单向交通路线
+                # line = ax.plot([start_x, end_x], [start_y, end_y], 
+                #        color=color, alpha=0.8, linewidth=linewidth)
+
+                # 绘制带箭头的线
+                arrow = ax.annotate('', 
+                           xy=(end_x, end_y), 
+                           xytext=(start_x, start_y),
+                           arrowprops=dict(arrowstyle='->', 
+                                         color=color, 
+                                         lw=linewidth,
+                                         alpha=0.8,
+                                         shrinkA=5, shrinkB=5))
                 
                 # 标注流量
                 if show_link_flows and flow > 0.1:
@@ -166,7 +176,7 @@ class Visualizer:
     
     @staticmethod
     def plot_convergence(iteration_log: List[Dict], 
-                        save_path: str = None):
+                        save_path: str = 'convergence.png'):
         """绘制收敛曲线"""
         if not iteration_log:
             return

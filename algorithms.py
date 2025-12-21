@@ -5,6 +5,7 @@ algorithms.py - 交通分配算法模块
 import numpy as np
 from typing import Dict, List, Tuple, Set
 from network import Network, Link
+from visualizer import Visualizer
 
 class AssignmentAlgorithms:
     """交通分配算法集合"""
@@ -214,10 +215,11 @@ class AssignmentAlgorithms:
                 break
         
         # 记录迭代过程
-        if iteration_log:
-            print("\n迭代过程总结:")
-            for log in iteration_log[-5:]:  # 显示最后5次迭代
-                print(f"迭代 {log['iteration']}: 相对间隙 = {log['relative_gap']:.6f}")
+        # if iteration_log:
+        #     print("\n迭代过程总结:")
+        #     for log in iteration_log[-5:]:  # 显示最后5次迭代
+        #         print(f"迭代 {log['iteration']}: 相对间隙 = {log['relative_gap']:.6f}")
+        # Visualizer.plot_convergence(iteration_log, 'convergence.png')
         
         return current_flows
     

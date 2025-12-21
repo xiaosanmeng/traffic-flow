@@ -3,6 +3,7 @@ evaluator.py - 分配结果评估模块
 """
 
 import numpy as np
+import pandas as pd
 from typing import Dict, List, Tuple
 from network import Network
 
@@ -18,9 +19,9 @@ class Evaluator:
         total_time = 0.0
         
         for link_id, flow in link_flows.items():
-            # 只计算原始路段，避免重复计算双向路段
-            if link_id >= 1000:
-                continue
+            # 计算双向路段
+            # if link_id >= 1000:
+            #     continue
                 
             link = network.links[link_id]
             travel_time = link.get_travel_time(flow)
@@ -93,18 +94,24 @@ class Evaluator:
     def compare_algorithms(
         network: Network,
         od_matrix: Dict[Tuple[str, str], float],
-        algorithms_results: Dict[str, Dict[int, float]]
+        algorithms_results: Dict[str, Dict[int, float]],
+        csv_file_path: str
     ) -> Dict[str, Dict]:
         """比较不同算法的结果"""
         comparison = {}
         total_demand = sum(od_matrix.values())
         
         for algo_name, flows in algorithms_results.items():
-            total_time = Evaluator.calculate_total_travel_time(network, flows)
-            avg_time = Evaluator.calculate_average_travel_time(network, flows, total_demand)
-            vc_ratios = Evaluator.calculate_volume_capacity_ratios(network, flows)
+            # total_time = Evaluator.calculate_total_travel_time(network, flows)
+            # avg_time = Evaluator.calculate_average_travel_time(network, flows, total_demand)
+            # vc_ratios = Evaluator.calculate_volume_capacity_ratios(network, flows)
             
-            # 计算统计指标
+            # 计算统计指标（从CSV获取VC值）
+            df = pd.read_csv(f"{csv_file_path}/{algo_name}.csv")
+            total_time = df['travel_time'].sum()
+            avg_time = df['travel_time'].mean()
+            vc_ratios = dict(zip(df['link_id'], df['v_c_ratio']))
+            
             if vc_ratios:
                 max_vc = max(vc_ratios.values())
                 avg_vc = np.mean(list(vc_ratios.values()))
@@ -140,8 +147,8 @@ class Evaluator:
         
         for algo_name, metrics in comparison.items():
             print(f"{algo_name:<15} "
-                  f"{metrics['total_travel_time']:<20.2f} "
-                  f"{metrics['average_travel_time']:<18.2f} "
+                  f"{metrics['total_travel_time']:<20.3f} "
+                  f"{metrics['average_travel_time']:<18.3f} "
                   f"{metrics['max_vc_ratio']:<12.3f} "
                   f"{metrics['average_vc_ratio']:<12.3f} "
                   f"{metrics['congested_links_count']:<15}")
@@ -156,15 +163,11 @@ class Evaluator:
         print("路段   流量(veh/h)   容量(veh/h)  V/C比   行程时间(min)   自由流时间(min)")
         # print("-"*80)
         
-        total_flow = 0
-        
+        # df = pd.read_csv(f"{csv_file_path}/{algo_name}.csv")
         for link_id, flow in link_flows.items():
-            # 双向合并
-            if link_id >= 1000:
-                continue
                 
             link = network.links[link_id]
-            travel_time = link.get_travel_time(flow)
+            travel_time = link.get_travel_time(flow) * 60
             free_flow_time_min = link.free_flow_time * 60
             vc_ratio = flow / link.capacity if link.capacity > 0 else 0
             
@@ -173,7 +176,4 @@ class Evaluator:
                   f"{vc_ratio:<5.3f}   {travel_time:<13.2f}   "
                   f"{free_flow_time_min:<13.2f}")
             
-            total_flow += flow + link_flows[link_id + 1000]
-        
         print("-"*80)
-        print(f"总计    {total_flow:<12.1f} ")

@@ -25,7 +25,7 @@ class Link:
     to_name: str
     length: float
     free_flow_time: float  # 自由流行程时间 t0（小时）
-    capacity: float
+    capacity: float # 单向通行能力
     max_speed: float
     is_bidirectional: bool = True  # 是否为双向
     

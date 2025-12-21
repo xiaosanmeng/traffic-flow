@@ -155,16 +155,12 @@ class IOHandler:
         for link_id, flow in link_flows.items():
             link = network.links[link_id]
             
-            # 合并反向路段
-            if link_id >= 1000:
-                continue
-
-            reverse_link_id = link_id * 1000
-            reverse_link = network.links[reverse_link_id]
-            reverse_flow = link_flows.get(reverse_link_id, 0)
+            # # 合并反向路段
+            # if link_id >= 1000:
+            #     continue
             
-            travel_time = 60 * (link.get_travel_time(flow) + reverse_link.get_travel_time(reverse_flow))
-            volume_capacity_ratio = (flow + reverse_flow) / link.capacity if link.capacity > 0 else 0
+            travel_time = 60 * link.get_travel_time(flow) 
+            volume_capacity_ratio = flow / link.capacity if link.capacity > 0 else 0
             
             results.append({
                 'link_id': link_id,
@@ -174,9 +170,9 @@ class IOHandler:
                 'max_speed_kmh': link.max_speed,
                 'free_flow_time_min': link.free_flow_time * 60,  # 转换为分钟
                 'capacity_veh_h': link.capacity,
-                'flow_veh_h': flow + reverse_flow,
+                'flow_veh_h': flow,
                 'v_c_ratio': volume_capacity_ratio,
-                'travel_time_min': travel_time,  # 已经是分钟
+                'travel_time': travel_time,  # 已经是分钟
                 'additional_delay_min': travel_time - (link.free_flow_time * 60)
             })
         

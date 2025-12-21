@@ -25,7 +25,7 @@ def main():
                        choices=['all', 'aon', 'inc', 'ue'],
                        help='分配方法: all(所有方法, 默认), aon(全有全无), inc(增量分配), ue(用户均衡)')
     parser.add_argument('--output', '-o', type=str, default='results',
-                       help='输出文件前缀 (默认: results)')
+                       help='输出文件路径 (默认: results)')
     
     args = parser.parse_args() # 解析命令行参数，并封装到args对象中
     
@@ -40,10 +40,7 @@ def main():
         network = IOHandler.read_network_json(args.network)
         od_matrix = IOHandler.read_demand_json(args.demand)
         
-        # 2. 回答测试问题
-        answer_test_questions(network, od_matrix)
-        
-        # 3. 执行交通分配
+        # 2. 执行交通分配
         print("\n2. 执行交通分配...")
         
         results = {}
@@ -72,11 +69,11 @@ def main():
             )
             elapsed = time.time() - start_time
             print(f"完成! 用时: {elapsed:.2f}秒")
-            results['User Equilibrium'] = ue_flows
+            results['User-Equilibrium'] = ue_flows
 
         # print(results)
         
-        # 4. 对每个算法保存并评估结果
+        # 3. 对每个算法结果保存、可视化并评估
         print("\n3. 评估分配结果...")
         
         # 对每个方法保存结果
@@ -86,10 +83,10 @@ def main():
             print(f"\n{method_name} 总出行时间: {total_time:.2f} (车·分钟)")
             
             # 打印路段流量详情(方法内容和算法比较方法重复)
-            # Evaluator.print_link_flow_details(network, flows)
+            Evaluator.print_link_flow_details(network, flows)
             
             # 保存结果到文件
-            output_file = f"{args.output}_{method_name.replace(' ', '_')}.csv"
+            output_file = f"./{args.output}/{method_name.replace(' ', '_')}.csv"
             IOHandler.save_results(network, flows, output_file)
             
             # 可视化
@@ -97,20 +94,23 @@ def main():
                 network, 
                 method_name,
                 output_file,
-                save_path=f"{args.output}_{method_name.replace(' ', '_')}.png"
+                save_path=f"./{args.output}/{method_name.replace(' ', '_')}.png"
             )
         
-        print(f"\n分配完成! 结果文件已保存到 {args.output}_*.csv 和 {args.output}_*.png")
+        print(f"\n分配完成! 结果文件已保存到 {args.output}/*.csv 和 {args.output}/*.png")
 
         # 比较不同算法
         if len(results) > 1:
-            comparison = Evaluator.compare_algorithms(network, od_matrix, results)
+            comparison = Evaluator.compare_algorithms(network, od_matrix, results, csv_file_path=f"./{args.output}")
             Evaluator.print_comparison_table(comparison)
         
-        # 5. 显示用户均衡下的路径流量
-        if 'User Equilibrium' in results:
-            print("\n4. 用户均衡路径分析...")
-            analyze_user_equilibrium_paths(network, od_matrix, results['User Equilibrium'])
+        # # 5. 显示用户均衡下的路径流量
+        # if 'User Equilibrium' in results:
+        #     print("\n4. 用户均衡路径分析...")
+        #     analyze_user_equilibrium_paths(network, od_matrix, results['User Equilibrium'])
+
+        # 5. 回答测试问题
+        answer_test_questions(network, od_matrix)
     
     except FileNotFoundError as e:
         print(f"错误: 文件未找到 - {e}")
@@ -125,54 +125,121 @@ def answer_test_questions(network: Network, od_matrix: Dict[Tuple[str, str], flo
     print("\n测试问题解答:")
     print("-"*80)
     
-    # 问题1: 不考虑拥堵的最快路径
-    print("\n1. 不考虑拥堵，任意两点间的最快路径是什么？")
-    print("   例如 A->F 的最短路径:")
-    path_names, cost = network.get_shortest_path_by_names("A", "F")
-    if path_names:
-        print(f"   路径: {' -> '.join(path_names)}")
-        print(f"   行程时间: {cost:.2f} 分钟 (基于自由流时间)")
-    else:
-        print(f"   A->F 之间没有路径")
-    
-    # 问题2: 考虑拥堵的最快路径（需要先分配）
-    print("\n2. 假设各路段流量已知，考虑拥堵效应，任意两点之间的最快路径是什么？")
-    print("   (此问题需要在分配后回答)")
-    
-    # 问题3: 单OD对分配
-    print("\n3. 只考虑一个起讫点对的交通需求，例如 A 到 F:")
-    
-    # 创建单OD对需求
-    single_od = {("A", "F"): 2000}
-    
-    print("   a) 全有全无分配:")
-    aon_single = AssignmentAlgorithms.all_or_nothing(network, single_od)
-    
-    # 统计使用的路径
-    used_links = [link_id for link_id, flow in aon_single.items() 
-                  if flow > 0 and link_id < 1000]
-    print(f"     使用路段数: {len(used_links)}")
-    
-    print("   b) 用户均衡分配:")
-    ue_single = AssignmentAlgorithms.user_equilibrium_frank_wolfe(
-        network, single_od, max_iterations=50, tolerance=1e-3
-    )
-    
-    # 获取路径流量
-    path_flows = AssignmentAlgorithms.get_path_flows(network, single_od, ue_single)
-    
-    if ("A", "F") in path_flows:
-        print(f"     使用的路径数: {len(path_flows[('A', 'F')])}")
-        for i, (path, flow, cost) in enumerate(path_flows[('A', 'F')], 1):
-            print(f"     路径{i}: {' -> '.join(path)}, 流量: {flow:.1f}, 时间: {cost:.2f}分钟")
-    
-    # 问题4: 全OD对分配
-    print("\n4. 考虑所有起讫点对的交通需求:")
-    total_demand = sum(od_matrix.values())
-    print(f"   总出行需求: {total_demand:.0f} 辆/小时")
-    print(f"   OD对数量: {len(od_matrix)}")
-    
-    print("-"*80)
+    while True:
+        print("\n请选择要回答的问题:")
+        print("1. 不考虑拥堵，任意两点间的最快路径是什么？")
+        print("2. 考虑拥堵效应，任意两点之间的最快路径是什么？")
+        print("3. 单OD对交通分配分析（例如A到F）")
+        print("4. 全OD对交通分配统计")
+        print("5. 退出系统")
+        
+        try:
+            choice = input("\n请输入选项编号(1-5): ").strip()
+            
+            if choice == "5":
+                print("感谢使用，再见！")
+                break
+                
+            if choice not in ["1", "2", "3", "4"]:
+                print("无效选项，请重新输入！")
+                continue
+            
+            # 问题1：不考虑拥堵的最快路径
+            if choice == "1":
+                origin = input("请输入起点名称（如A）: ").strip().upper()
+                destination = input("请输入终点名称（如F）: ").strip().upper()
+                
+                if origin not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：起点'{origin}'不存在！")
+                    continue
+                if destination not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：终点'{destination}'不存在！")
+                    continue
+                
+                print(f"\n计算{origin}到{destination}的最快路径（基于自由流时间）:")
+                path, _ = network.get_shortest_path(network.get_node_id_by_name(origin), network.get_node_id_by_name(destination))
+                print(f"最快路径: {' -> '.join(network.get_node_name_by_id(item) for item in path)}")
+
+            # 问题2：考虑拥堵的最快路径
+            elif choice == "2":
+                origin = input("请输入起点名称（如A）: ").strip().upper()
+                destination = input("请输入终点名称（如F）: ").strip().upper()
+                
+                if origin not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：起点'{origin}'不存在！")
+                    continue
+                if destination not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：终点'{destination}'不存在！")
+                    continue
+
+                print('请输入各路段流量（格式：link_id:flow, 如1:100,1000:200,2:300,2000:400, 其中1000/2000表示路段1/2的反向路段）:')
+                link_flows_input = input().strip()
+                link_flows = {link_id: 0.0 for link_id in network.links}
+                if not link_flows_input:
+                    print("未输入任何路段流量，初始化为0")
+                else:
+                    for item in link_flows_input.split(','):
+                        link_id, flow = item.split(':')
+                        link_flows[int(link_id)] = float(flow)
+                
+                print(f"\n计算{origin}到{destination}的最快路径（基于给定流量）:")
+                path, _ = network.get_shortest_path(network.get_node_id_by_name(origin), network.get_node_id_by_name(destination), 
+                                                   link_flows)
+                print(f"最快路径: {' -> '.join(network.get_node_name_by_id(item) for item in path)}")   
+                
+            # 问题3：单OD对交通分配分析
+            elif choice == "3":
+                origin = input("请输入起点名称（如A）: ").strip().upper()
+                destination = input("请输入终点名称（如F）: ").strip().upper()
+                
+                if origin not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：起点'{origin}'不存在！")
+                    continue
+                if destination not in [node.name for node in network.nodes.values()]:
+                    print(f"错误：终点'{destination}'不存在！")
+                    continue
+
+                od_demand = float(input(f"请输入{origin}到{destination}的交通需求量（辆/小时）: "))
+                single_od = {(origin, destination): od_demand}
+                print("\n全有全无分配结果:")
+                aon_flows = AssignmentAlgorithms.all_or_nothing(network, single_od)
+                
+                # 统计使用的路段
+                used_links_aon = []
+                for link_id, flow in aon_flows.items():
+                    if flow > 0 and link_id < 1000:  # 只统计原始路段
+                        link = network.links[link_id]
+                        used_links_aon.append((link, flow))
+                
+                print(f"   使用的路段数: {len(used_links_aon)}")
+                print(f"   使用的路段详情:")
+                for link, flow in used_links_aon:
+                    vc_ratio = flow / link.capacity if link.capacity > 0 else 0
+                    print(f"     {link.from_name}→{link.to_name}: "
+                          f"流量={flow:.0f}, 容量={link.capacity}, V/C={vc_ratio:.2f}")
+                
+                # 获取路径信息
+                aon_path_names, aon_cost = network.get_shortest_path_by_names(origin, destination)
+                print(f"   唯一路径: {' → '.join(aon_path_names)}")
+                print(f"   路径时间: {aon_cost:.2f} 分钟")
+
+
+            elif choice == "4":
+                print("已用三种算法对交通流进行分配，并给出各路段流量及出行总时间")
+
+
+        except KeyboardInterrupt:
+            print("\n\n程序被中断")
+            break
+        except Exception as e:
+            print(f"\n发生错误: {e}")
+            import traceback
+            traceback.print_exc()
+            input("按Enter键继续...")
+
+                
+            
+
 
 def analyze_user_equilibrium_paths(
     network: Network, 
