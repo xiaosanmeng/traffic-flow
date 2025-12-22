@@ -80,7 +80,7 @@ def main():
         for method_name, flows in results.items():
             # 计算总出行时间
             total_time = Evaluator.calculate_total_travel_time(network, flows)
-            print(f"\n{method_name} 总出行时间: {total_time:.2f} (车·分钟)")
+            print(f"\n{method_name} 总出行时间: {total_time:.2f} (车·小时)")
             
             # 打印路段流量详情(方法内容和算法比较方法重复)
             Evaluator.print_link_flow_details(network, flows)
