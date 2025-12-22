@@ -12,19 +12,13 @@ class AssignmentAlgorithms:
     
     @staticmethod
     def all_or_nothing(network: Network, od_matrix: Dict[Tuple[str, str], float]) -> Dict[int, float]:
-        """
-        全有全无分配
-        所有OD流量都分配到最短路径上
-        """
-        # 初始化路段流量
+        """全有全无分配"""
         link_flows = {link_id: 0.0 for link_id in network.links}
         
-        # 对每个OD对进行分配
         for (origin_name, destination_name), demand in od_matrix.items():
             if demand <= 0:
                 continue
             
-            # 获取节点ID
             origin = network.get_node_id_by_name(origin_name)
             destination = network.get_node_id_by_name(destination_name)
             
@@ -48,36 +42,28 @@ class AssignmentAlgorithms:
     def incremental_assignment(
         network: Network, 
         od_matrix: Dict[Tuple[str, str], float], 
-        increments: int = 4
+        increments: int = 10
     ) -> Dict[int, float]:
-        """
-        增量分配
-        将OD需求分成若干份，逐步加载到网络中
-        """
-        # 初始化路段流量
+        """增量分配"""
         link_flows = {link_id: 0.0 for link_id in network.links}
         
-        # 将每个OD需求分成increments份
         for increment in range(1, increments + 1):
             print(f"第{increment}次迭代...")
             for (origin_name, destination_name), demand in od_matrix.items():
                 if demand <= 0:
                     continue
                 
-                # 获取节点ID
                 origin = network.get_node_id_by_name(origin_name)
                 destination = network.get_node_id_by_name(destination_name)
                 
                 if origin is None or destination is None:
                     continue
                 
-                # 当前增量的需求
                 incremental_demand = demand / increments
                 
                 # 基于当前流量计算最短路径
                 path, _ = network.get_shortest_path(origin, destination, link_flows)
                 
-                # 分配当前增量
                 for i in range(len(path) - 1):
                     from_node = path[i]
                     to_node = path[i + 1]
@@ -88,48 +74,148 @@ class AssignmentAlgorithms:
         return link_flows
     
     @staticmethod
+    def _objective_function(network: Network, base_flows: Dict[int, float], 
+                          direction: Dict[int, float], alpha: float) -> float:
+        """
+        计算目标函数值（总出行时间）单位：车·小时
+        """
+        total_time = 0.0
+        for link_id, base_flow in base_flows.items():
+            link = network.links[link_id]
+            flow = base_flow + alpha * direction[link_id]
+            flow = max(0.0, flow)  # 确保非负
+            
+            # link.get_travel_time() 返回分钟，转换为小时
+            travel_time_hours = link.get_travel_time(flow) / 60.0
+            total_time += flow * travel_time_hours  # 车·小时
+        
+        return total_time
+    
+    @staticmethod
+    def _golden_section_search(network: Network, base_flows: Dict[int, float], 
+                              direction: Dict[int, float], max_iter: int = 30) -> float:
+        """
+        黄金分割法搜索最优步长
+        """
+        phi = 0.618033988749895  # 黄金比例
+        a, b = 0.0, 1.0
+        
+        # 检查边界值
+        f_a = AssignmentAlgorithms._objective_function(network, base_flows, direction, a)
+        f_b = AssignmentAlgorithms._objective_function(network, base_flows, direction, b)
+        
+        # 如果方向为零，直接返回
+        # if np.allclose(list(direction.values()), 0, atol=1e-6):
+        #     return 0.0
+        max_dir = max(abs(d) for d in direction.values())
+        if max_dir < 1e-8:
+            return 0.0
+        
+        # 初始化两个黄金分割点
+        x1 = b - phi * (b - a)
+        x2 = a + phi * (b - a)
+        f1 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x1)
+        f2 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x2)
+        
+        # 黄金分割法主循环
+        # for i in range(max_iter):
+        #     if f1 < f2:
+        #         b = x2
+        #         x2 = x1
+        #         f2 = f1
+        #         x1 = b - phi * (b - a)
+        #         f1 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x1)
+        #     else:
+        #         a = x1
+        #         x1 = x2
+        #         f1 = f2
+        #         x2 = a + phi * (b - a)
+        #         f2 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x2)
+            
+        #     # 如果区间足够小，提前结束
+        #     if (b - a) < 1e-6:
+        #         break
+
+        # 黄金分割法主循环
+        for i in range(max_iter):
+            if f1 < f2:
+                # 最小值在 [a, x2] 区间
+                b = x2
+                f_b = f2
+                x2 = x1
+                f2 = f1
+                x1 = b - phi * (b - a)
+                f1 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x1)
+            else:
+                # 最小值在 [x1, b] 区间
+                a = x1
+                f_a = f1
+                x1 = x2
+                f1 = f2
+                x2 = a + phi * (b - a)
+                f2 = AssignmentAlgorithms._objective_function(network, base_flows, direction, x2)
+            
+            # 收敛检查：区间足够小或函数值变化很小
+            if (b - a) < 1e-4:
+                break
+            
+            # 检查函数值是否不再显著变化
+            if i > 5 and abs(f1 - f2) < 1e-6 * max(abs(f1), abs(f2), 1.0):
+                break
+        
+        optimal_alpha = (a + b) / 2
+        optimal_alpha = max(0.0, min(1.0, optimal_alpha))
+        
+        # # 检查步长是否过小
+        # if optimal_alpha < 1e-4 and i > 0:
+        #     # 使用MSA步长作为备选
+        #     return 1.0 / (i + 2)
+        
+        return optimal_alpha
+    
+    @staticmethod
     def user_equilibrium_frank_wolfe(
         network: Network, 
         od_matrix: Dict[Tuple[str, str], float], 
-        max_iterations: int = 100,
-        tolerance: float = 1e-4
-    ) -> Dict[int, float]:
+        max_iterations: int = 200,
+        tolerance: float = 1e-3
+    ) -> Tuple[Dict[int, float], List[Dict]]:
         """
         使用Frank-Wolfe算法求解用户均衡问题
+        返回: (流量字典, 迭代日志)
         """
         print("开始Frank-Wolfe用户均衡分配...")
         
-        # 步骤1: 初始解 - 全有全无分配（自由流时间）
+        # 步骤1: 初始解
         print("步骤1: 初始全有全无分配")
         current_flows = AssignmentAlgorithms.all_or_nothing(network, od_matrix)
         
         iteration_log = []
+        total_demand = sum(od_matrix.values())
         
         for iteration in range(max_iterations):
-            # 步骤2: 计算当前路段行程时间
-            current_times = {}
+            
+            current_times_minutes = {}
             for link_id, flow in current_flows.items():
                 link = network.links[link_id]
-                current_times[link_id] = link.get_travel_time(flow)
+                current_times_minutes[link_id] = link.get_travel_time(flow)
             
-            # 步骤3: 计算辅助流量 - 在阻抗下做全有全无分配
+            # 步骤2: 计算辅助流量
             auxiliary_flows = {link_id: 0.0 for link_id in network.links}
             
             for (origin_name, destination_name), demand in od_matrix.items():
                 if demand <= 0:
                     continue
                 
-                # 获取节点ID
                 origin = network.get_node_id_by_name(origin_name)
                 destination = network.get_node_id_by_name(destination_name)
                 
                 if origin is None or destination is None:
                     continue
                 
-                # 计算最短路径（基于当前阻抗）
+                # 基于当前阻抗计算最短路径
                 path, _ = network.get_shortest_path(origin, destination, current_flows)
                 
-                # 分配流量
                 for i in range(len(path) - 1):
                     from_node = path[i]
                     to_node = path[i + 1]
@@ -137,68 +223,49 @@ class AssignmentAlgorithms:
                     if link:
                         auxiliary_flows[link.id] += demand
             
-            # 步骤4: 计算下降方向
+            # 步骤3: 计算下降方向
             direction = {}
             for link_id in current_flows:
                 direction[link_id] = auxiliary_flows[link_id] - current_flows[link_id]
             
-            # 步骤5: 计算最优步长（二分法）
-            low, high = 0.0, 1.0
+            # 步骤4: 计算最优步长
+            optimal_alpha = AssignmentAlgorithms._golden_section_search(
+                network, current_flows, direction
+            )
             
-            def objective(alpha):
-                """目标函数：总出行时间"""
-                total_time = 0.0
-                for link_id in current_flows:
-                    link = network.links[link_id]
-                    flow = current_flows[link_id] + alpha * direction[link_id]
-                    total_time += flow * link.get_travel_time(flow)
-                return total_time
+            # 如果黄金分割法失败，使用MSA步长
+            if optimal_alpha < 1e-4:
+                optimal_alpha = 1.0 / (iteration + 2)
             
-            # 黄金分割法求最优步长
-            phi = 0.618  # 黄金比例
-            a, b = low, high
-            x1 = b - phi * (b - a)
-            x2 = a + phi * (b - a)
-            
-            for _ in range(20):
-                if objective(x1) < objective(x2):
-                    b = x2
-                    x2 = x1
-                    x1 = b - phi * (b - a)
-                else:
-                    a = x1
-                    x1 = x2
-                    x2 = a + phi * (b - a)
-            
-            optimal_alpha = (a + b) / 2
-            
-            # 也可以使用简单步长公式：2/(k+2)
-            # optimal_alpha = 2.0 / (iteration + 2)
-            
-            # 步骤6: 更新流量
+            # 步骤5: 更新流量
             previous_flows = current_flows.copy()
             for link_id in current_flows:
                 current_flows[link_id] += optimal_alpha * direction[link_id]
-                # 确保流量非负
                 current_flows[link_id] = max(0.0, current_flows[link_id])
             
-            # 步骤7: 计算收敛指标
+            # 步骤6: 计算收敛指标
             gap = 0.0
-            total_demand = sum(od_matrix.values())
-            
             for link_id in current_flows:
                 link = network.links[link_id]
-                current_time = link.get_travel_time(current_flows[link_id])
-                auxiliary_time = link.get_travel_time(auxiliary_flows[link_id])
-                gap += (auxiliary_time - current_time) * direction[link_id]
+                # 当前流量下的行程时间（分钟）
+                current_time_min = link.get_travel_time(current_flows[link_id])
+                # 辅助流量下的行程时间（分钟）
+                auxiliary_time_min = link.get_travel_time(auxiliary_flows[link_id])
+                # 转换为小时用于计算
+                current_time_hr = current_time_min / 60.0
+                auxiliary_time_hr = auxiliary_time_min / 60.0
+                
+                gap += (auxiliary_time_hr - current_time_hr) * (auxiliary_flows[link_id] - current_flows[link_id])
             
-            relative_gap = abs(gap) / (total_demand + 1e-10)
+            relative_gap = abs(gap) / max(1.0, total_demand)
             
-            # 计算总出行时间
+            # 计算总出行时间（车·小时）
             total_travel_time = 0.0
             for link_id, flow in current_flows.items():
                 link = network.links[link_id]
-                total_travel_time += flow * link.get_travel_time(flow)
+                travel_time_min = link.get_travel_time(flow)  # 分钟
+                travel_time_hr = travel_time_min / 60.0       # 小时
+                total_travel_time += flow * travel_time_hr    # 车·小时
             
             iteration_log.append({
                 'iteration': iteration + 1,
@@ -207,91 +274,62 @@ class AssignmentAlgorithms:
                 'step_size': optimal_alpha
             })
             
-            print(f"迭代 {iteration + 1}: 相对间隙 = {relative_gap:.6f}, 总时间 = {total_travel_time:.2f}, 步长 = {optimal_alpha:.4f}")
+            print(f"迭代 {iteration + 1}: 相对间隙 = {relative_gap:.6f}, "
+                  f"总时间 = {total_travel_time * 60:.2f} 车·小时, "
+                  f"步长 = {optimal_alpha:.4f}")
             
-            # 检查收敛
+            # 检查收敛条件
             if relative_gap < tolerance:
-                print(f"在第 {iteration + 1} 次迭代收敛")
+                print(f"在第 {iteration + 1} 次迭代达到收敛")
+                break
+            
+            # 检查步长是否过小导致停滞
+            if optimal_alpha < 1e-5 and iteration > 10:
+                print(f"步长过小({optimal_alpha:.6f})，算法可能停滞，提前结束")
                 break
         
-        # 记录迭代过程
-        # if iteration_log:
-        #     print("\n迭代过程总结:")
-        #     for log in iteration_log[-5:]:  # 显示最后5次迭代
-        #         print(f"迭代 {log['iteration']}: 相对间隙 = {log['relative_gap']:.6f}")
-        # Visualizer.plot_convergence(iteration_log, 'convergence.png')
+        print(f"最终相对间隙: {relative_gap:.6f}, 目标收敛阈值: {tolerance}")
         
-        return current_flows
+        return current_flows, iteration_log
+
+    @staticmethod
+    def calculate_total_travel_time(network: Network, flows: Dict[int, float]) -> float:
+        """
+        计算总出行时间，单位：车·小时
+        
+        Args:
+            network: 网络对象
+            flows: 路段流量字典
+        
+        Returns:
+            总出行时间（车·小时）
+        """
+        total_time = 0.0
+        for link_id, flow in flows.items():
+            if link_id in network.links:
+                link = network.links[link_id]
+                travel_time_min = link.get_travel_time(flow)  # 分钟
+                travel_time_hr = travel_time_min / 60.0       # 转换为小时
+                total_time += flow * travel_time_hr          # 车·小时
+        
+        return total_time
     
     @staticmethod
-    def get_path_flows(
-        network: Network, 
-        od_matrix: Dict[Tuple[str, str], float], 
-        link_flows: Dict[int, float]
-    ) -> Dict[Tuple[str, str], List[Tuple[List[str], float, float]]]:
+    def calculate_average_travel_time(network: Network, flows: Dict[int, float], 
+                                     total_demand: float) -> float:
         """
-        获取每个OD对使用的路径及其流量
-        使用流量加载方法估计路径流量
+        计算平均出行时间，单位：小时/车
+        
+        Args:
+            network: 网络对象
+            flows: 路段流量字典
+            total_demand: 总需求
+        
+        Returns:
+            平均出行时间（小时/车）
         """
-        path_flows = {}
+        if total_demand <= 0:
+            return 0.0
         
-        for (origin_name, destination_name), demand in od_matrix.items():
-            if demand <= 0:
-                continue
-            
-            # 获取节点ID
-            origin = network.get_node_id_by_name(origin_name)
-            destination = network.get_node_id_by_name(destination_name)
-            
-            if origin is None or destination is None:
-                continue
-            
-            # 获取多条可能路径
-            paths = network.get_all_shortest_paths(origin, destination)
-            
-            # 简单估计：根据路径成本分配流量
-            if not paths:
-                continue
-            
-            # 计算每条路径的阻抗（基于最终流量）
-            path_costs = []
-            path_names_list = []
-            
-            for path, _ in paths:
-                # 将节点ID转换为名称
-                path_names = [network.get_node_name_by_id(node_id) for node_id in path]
-                path_names_list.append(path_names)
-                
-                cost = 0.0
-                for i in range(len(path) - 1):
-                    from_node = path[i]
-                    to_node = path[i + 1]
-                    link = network.get_link(from_node, to_node)
-                    if link:
-                        cost += link.get_travel_time(link_flows.get(link.id, 0))
-                path_costs.append(cost)
-            
-            # 使用Logit模型分配流量（简化）
-            if path_costs:
-                min_cost = min(path_costs)
-                total_weight = 0.0
-                weights = []
-                
-                for cost in path_costs:
-                    # 阻抗差较大时，权重较小
-                    weight = np.exp(-0.5 * (cost - min_cost))  # θ=0.5
-                    weights.append(weight)
-                    total_weight += weight
-                
-                # 分配流量
-                path_info = []
-                for path_names, weight, cost in zip(path_names_list, weights, path_costs):
-                    if total_weight > 0:
-                        flow = demand * weight / total_weight
-                    else:
-                        flow = demand / len(paths)
-                    path_info.append((path_names, flow, cost))
-                
-                path_flows[(origin_name, destination_name)] = path_info
-        
-        return path_flows
+        total_time = AssignmentAlgorithms.calculate_total_travel_time(network, flows)
+        return total_time / total_demand

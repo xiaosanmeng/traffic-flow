@@ -102,15 +102,15 @@ class Evaluator:
         total_demand = sum(od_matrix.values())
         
         for algo_name, flows in algorithms_results.items():
-            # total_time = Evaluator.calculate_total_travel_time(network, flows)
-            # avg_time = Evaluator.calculate_average_travel_time(network, flows, total_demand)
-            # vc_ratios = Evaluator.calculate_volume_capacity_ratios(network, flows)
+            total_time = Evaluator.calculate_total_travel_time(network, flows)
+            avg_time = Evaluator.calculate_average_travel_time(network, flows, total_demand)
+            vc_ratios = Evaluator.calculate_volume_capacity_ratios(network, flows)
             
             # 计算统计指标（从CSV获取VC值）
-            df = pd.read_csv(f"{csv_file_path}/{algo_name}.csv")
-            total_time = df['travel_time'].sum()
-            avg_time = df['travel_time'].mean()
-            vc_ratios = dict(zip(df['link_id'], df['v_c_ratio']))
+            # df = pd.read_csv(f"{csv_file_path}/{algo_name}.csv")
+            # total_time = df['travel_time'].sum()
+            # avg_time = df['travel_time'].mean()
+            # vc_ratios = dict(zip(df['link_id'], df['v_c_ratio']))
             
             if vc_ratios:
                 max_vc = max(vc_ratios.values())
@@ -139,7 +139,7 @@ class Evaluator:
         print("算法性能比较")
         print("="*80)
         
-        headers = ["算法", "总出行时间(车·分钟)", "平均出行时间(分钟)", 
+        headers = ["算法", "总出行时间(车·小时)", "平均出行时间(小时)", 
                   "最大V/C比", "平均V/C比", "拥堵路段数(V/C≥0.8)"]
         print(f"{headers[0]:<15} {headers[1]:<20} {headers[2]:<18} "
               f"{headers[3]:<12} {headers[4]:<12} {headers[5]:<15}")

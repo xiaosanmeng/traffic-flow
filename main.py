@@ -64,7 +64,7 @@ def main():
         if args.method in ['all', 'ue']:
             print("\n用户均衡分配 (User Equilibrium - Frank Wolfe)...")
             start_time = time.time()
-            ue_flows = AssignmentAlgorithms.user_equilibrium_frank_wolfe(
+            ue_flows, iteration_log = AssignmentAlgorithms.user_equilibrium_frank_wolfe(
                 network, od_matrix, max_iterations=100, tolerance=1e-4
             )
             elapsed = time.time() - start_time
@@ -95,6 +95,12 @@ def main():
                 method_name,
                 output_file,
                 save_path=f"./{args.output}/{method_name.replace(' ', '_')}.png"
+            )
+            
+            # 可视化收敛曲线
+            Visualizer.plot_convergence(
+                iteration_log,
+                save_path=f"./{args.output}/convergence.png"
             )
         
         print(f"\n分配完成! 结果文件已保存到 {args.output}/*.csv 和 {args.output}/*.png")

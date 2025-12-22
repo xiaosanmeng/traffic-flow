@@ -189,16 +189,16 @@ class Visualizer:
         
         # 绘制相对间隙
         ax1.semilogy(iterations, gaps, 'b-o', linewidth=2, markersize=6)
-        ax1.set_xlabel('迭代次数', fontsize=12)
-        ax1.set_ylabel('相对间隙 (log scale)', fontsize=12)
-        ax1.set_title('Frank-Wolfe算法收敛曲线', fontsize=14)
+        ax1.set_xlabel('Iteration Count', fontsize=12)
+        ax1.set_ylabel('Relative Gap (log scale)', fontsize=12)
+        ax1.set_title('Frank-Wolfe Algorithm Convergence Curve', fontsize=14)
         ax1.grid(True, alpha=0.3)
         
         # 绘制总出行时间
         ax2.plot(iterations, times, 'r-s', linewidth=2, markersize=6)
-        ax2.set_xlabel('迭代次数', fontsize=12)
-        ax2.set_ylabel('总出行时间 (veh·min)', fontsize=12)
-        ax2.set_title('总出行时间变化', fontsize=14)
+        ax2.set_xlabel('Iteration Count', fontsize=12)
+        ax2.set_ylabel('Total Travel Time (veh·min)', fontsize=12)
+        ax2.set_title('Total Travel Time Evolution', fontsize=14)
         ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
